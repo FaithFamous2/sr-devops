@@ -200,12 +200,41 @@ jobs:
     steps:
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          REPO: ${{ github.repository }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          envs: GHCR_USER,GHCR_TOKEN,REPO
           script: |
             cd /opt/secure-drop
-            docker-compose -f docker-compose.yml -f docker-compose.prod.yml pull
+
+            # Pull latest code
+            git pull
+
+            # Log in to GitHub Container Registry
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+
+            # Pull pre-built images from registry
+            docker pull ghcr.io/$REPO/backend:main
+            docker pull ghcr.io/$REPO/frontend:main
+
+            # Tag images for docker-compose
+            docker tag ghcr.io/$REPO/backend:main secure-drop-backend:latest
+            docker tag ghcr.io/$REPO/frontend:main secure-drop-frontend:latest
+
+            # Stop old containers and start new ones
+            docker-compose -f docker-compose.yml -f docker-compose.prod.yml down
             docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+            # Wait for containers to be healthy
+            sleep 30
+
+            # Run migrations
+            docker exec secure-drop-backend php artisan migrate --force
+
+            # Clean up
             docker system prune -f
