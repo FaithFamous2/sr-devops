@@ -74,15 +74,23 @@ services:
     build:
       context: ./backend
       target: production
-    env_file:
-      - ./backend/.env.production
+    container_name: secure-drop-backend
     environment:
+      - APP_NAME=Secure Drop
       - APP_ENV=production
       - APP_DEBUG=false
       - APP_KEY=base64:anZTCB2Kl2GWs7jY1i4r8Vih342Rz0FtOwN0/5cceG4=
       - APP_URL=${APP_URL:-http://51.20.121.247}
       - FRONTEND_URL=${FRONTEND_URL:-http://51.20.121.247}
       - DB_CONNECTION=sqlite
+      - LOG_CHANNEL=stack
+      - LOG_LEVEL=error
+      - CACHE_STORE=file
+      - SESSION_DRIVER=file
+      - MAIL_MAILER=log
+    volumes:
+      - backend-data:/var/www/html/storage
+      - backend-db:/var/www/html/database
     networks:
       - secure-drop-network
     healthcheck:
@@ -93,13 +101,10 @@ services:
       start_period: 30s
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.backend.rule=PathPrefix(`/api`)"
+      - "traefik.http.routers.backend.rule=PathPrefix(`/api`) || PathPrefix(`/up`)"
       - "traefik.http.routers.backend.entrypoints=web"
       - "traefik.http.routers.backend.priority=100"
       - "traefik.http.services.backend.loadbalancer.server.port=8080"
-      - "traefik.http.services.backend.loadbalancer.healthcheck.path=/up"
-      - "traefik.http.services.backend.loadbalancer.healthcheck.interval=10s"
-      - "traefik.http.services.backend.loadbalancer.healthcheck.timeout=5s"
     restart: always
     # depends_on:
     #   db:
@@ -118,17 +123,21 @@ services:
     build:
       context: ./frontend
       target: production
+    container_name: secure-drop-frontend
     networks:
       - secure-drop-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
       - "traefik.http.routers.frontend.entrypoints=web"
       - "traefik.http.routers.frontend.priority=1"
       - "traefik.http.services.frontend.loadbalancer.server.port=80"
-      - "traefik.http.services.frontend.loadbalancer.healthcheck.path=/"
-      - "traefik.http.services.frontend.loadbalancer.healthcheck.interval=10s"
-      - "traefik.http.services.frontend.loadbalancer.healthcheck.timeout=5s"
     restart: always
     deploy:
       resources:
@@ -141,6 +150,8 @@ services:
 
 volumes:
   letsencrypt:
+  backend-data:
+  backend-db:
   # mysql-data:  # Uncomment when using MySQL to persist database data
 
 networks:
