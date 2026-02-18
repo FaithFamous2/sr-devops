@@ -1,20 +1,27 @@
+# =============================================================================
 # Docker Compose Production Configuration
-# Use with: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Production-specific settings: restart policies, SSL, resource limits.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# =============================================================================
 
 services:
-  # Traefik - Production configuration with SSL
+  # Traefik - Reverse Proxy with SSL
   traefik:
+    restart: always
     command:
-      - "--api.dashboard=false"
+      - "--api.insecure=false"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
       - "--providers.docker.network=secure-drop-network"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
-      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@example.com}"
-      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
-      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
-      - "--log.level=INFO"
+      # Let's Encrypt configuration (uncomment when you have a domain)
+      # - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      # - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      # - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@example.com}"
+      # - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--ping=true"
+      - "--log.level=WARN"
     ports:
       - "80:80"
       - "443:443"
@@ -23,74 +30,28 @@ services:
       - letsencrypt:/letsencrypt
     networks:
       - secure-drop-network
-    restart: always
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
-  # =============================================================================
-  # DATABASE CONFIGURATION (PRODUCTION)
-  # =============================================================================
-  # For production, MySQL is recommended over SQLite for better performance,
-  # reliability, and concurrent connections.
-  #
-  # To use MySQL:
-  # 1. Uncomment the 'db' service below
-  # 2. Set the environment variables (use secrets in production!)
-  # 3. Uncomment 'depends_on' in the backend service
-  # 4. Update DB_CONNECTION in backend environment to 'mysql'
-  # =============================================================================
-
-  # -----------------------------------------------------------------------------
-  # MySQL Database (Uncomment for production use)
-  # -----------------------------------------------------------------------------
-  # db:
-  #   image: mysql:8.0
-  #   container_name: secure-drop-db
-  #   restart: always
-  #   environment:
-  #     MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change_me_in_production}
-  #     MYSQL_DATABASE: ${MYSQL_DATABASE:-secure_drop}
-  #     MYSQL_USER: ${MYSQL_USER:-secure_drop_user}
-  #     MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change_me_in_production}
-  #   volumes:
-  #     - mysql-data:/var/lib/mysql
-  #   networks:
-  #     - secure-drop-network
-  #   healthcheck:
-  #     test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-change_me_in_production}"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-  #     start_period: 30s
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         cpus: '1'
-  #         memory: 1G
-  #       reservations:
-  #         cpus: '0.25'
-  #         memory: 256M
-
-  # Backend - Production configuration
+  # Backend API - Laravel
   backend:
-    build:
-      context: ./backend
-      target: production
-    container_name: secure-drop-backend
+    restart: always
     environment:
-      - APP_NAME=Secure Drop
       - APP_ENV=production
       - APP_DEBUG=false
-      - APP_KEY=base64:anZTCB2Kl2GWs7jY1i4r8Vih342Rz0FtOwN0/5cceG4=
+      - APP_KEY=${APP_KEY:-base64:anZTCB2Kl2GWs7jY1i4r8Vih342Rz0FtOwN0/5cceG4=}
       - APP_URL=${APP_URL:-http://51.20.121.247}
       - FRONTEND_URL=${FRONTEND_URL:-http://51.20.121.247}
       - DB_CONNECTION=sqlite
-      - LOG_CHANNEL=stack
       - LOG_LEVEL=error
-      - CACHE_STORE=file
-      - SESSION_DRIVER=file
-      - MAIL_MAILER=log
-    volumes:
-      - backend-data:/var/www/html/storage
-      - backend-db:/var/www/html/database
     networks:
       - secure-drop-network
     healthcheck:
@@ -101,29 +62,24 @@ services:
       start_period: 30s
     labels:
       - "traefik.enable=true"
+      # Route /api and /up to backend
       - "traefik.http.routers.backend.rule=PathPrefix(`/api`) || PathPrefix(`/up`)"
       - "traefik.http.routers.backend.entrypoints=web"
       - "traefik.http.routers.backend.priority=100"
       - "traefik.http.services.backend.loadbalancer.server.port=8080"
-    restart: always
-    # depends_on:
-    #   db:
-    #     condition: service_healthy  # Uncomment when using MySQL
+      # Uncomment for HTTPS with domain:
+      # - "traefik.http.routers.backend-secure.rule=PathPrefix(`/api`) || PathPrefix(`/up`)"
+      # - "traefik.http.routers.backend-secure.entrypoints=websecure"
+      # - "traefik.http.routers.backend-secure.tls=true"
+      # - "traefik.http.routers.backend-secure.tls.certresolver=letsencrypt"
     deploy:
       resources:
         limits:
-          cpus: '1'
           memory: 512M
-        reservations:
-          cpus: '0.25'
-          memory: 128M
 
-  # Frontend - Production configuration
+  # Frontend - React/Nginx
   frontend:
-    build:
-      context: ./frontend
-      target: production
-    container_name: secure-drop-frontend
+    restart: always
     networks:
       - secure-drop-network
     healthcheck:
@@ -134,25 +90,23 @@ services:
       start_period: 10s
     labels:
       - "traefik.enable=true"
+      # Route all other traffic to frontend
       - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
       - "traefik.http.routers.frontend.entrypoints=web"
       - "traefik.http.routers.frontend.priority=1"
       - "traefik.http.services.frontend.loadbalancer.server.port=80"
-    restart: always
+      # Uncomment for HTTPS with domain:
+      # - "traefik.http.routers.frontend-secure.rule=PathPrefix(`/`)"
+      # - "traefik.http.routers.frontend-secure.entrypoints=websecure"
+      # - "traefik.http.routers.frontend-secure.tls=true"
+      # - "traefik.http.routers.frontend-secure.tls.certresolver=letsencrypt"
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 256M
-        reservations:
-          cpus: '0.1'
-          memory: 64M
+          memory: 128M
 
 volumes:
   letsencrypt:
-  backend-data:
-  backend-db:
-  # mysql-data:  # Uncomment when using MySQL to persist database data
 
 networks:
   secure-drop-network:
