@@ -14,6 +14,9 @@ RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
 # Copy application files
 COPY . .
 
+# Create bootstrap cache directory
+RUN mkdir -p bootstrap/cache && chmod 775 bootstrap/cache
+
 # Generate optimized autoloader
 RUN composer dump-autoload --optimize
 
