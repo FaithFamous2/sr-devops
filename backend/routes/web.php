@@ -20,5 +20,5 @@ Route::get('/', function () {
 
 // Health check endpoint for Traefik/Load balancer (simple, fast response)
 Route::get('/up', function () {
-    return response()->json(['status' => 'ok']);
+    return response()->json(['status' => 'ok'], 200);
 });

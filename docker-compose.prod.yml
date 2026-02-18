@@ -67,6 +67,9 @@ services:
       - "traefik.http.routers.backend.entrypoints=web"
       - "traefik.http.routers.backend.priority=100"
       - "traefik.http.services.backend.loadbalancer.server.port=8080"
+      - "traefik.http.services.backend.loadbalancer.healthcheck.path=/up"
+      - "traefik.http.services.backend.loadbalancer.healthcheck.interval=10s"
+      - "traefik.http.services.backend.loadbalancer.healthcheck.timeout=5s"
       # Uncomment for HTTPS with domain:
       # - "traefik.http.routers.backend-secure.rule=PathPrefix(`/api`) || PathPrefix(`/up`)"
       # - "traefik.http.routers.backend-secure.entrypoints=websecure"
@@ -90,11 +93,14 @@ services:
       start_period: 10s
     labels:
       - "traefik.enable=true"
-      # Route all other traffic to frontend
+      # Route all other traffic to frontend (lower priority than backend)
       - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
       - "traefik.http.routers.frontend.entrypoints=web"
       - "traefik.http.routers.frontend.priority=1"
       - "traefik.http.services.frontend.loadbalancer.server.port=8080"
+      - "traefik.http.services.frontend.loadbalancer.healthcheck.path=/"
+      - "traefik.http.services.frontend.loadbalancer.healthcheck.interval=10s"
+      - "traefik.http.services.frontend.loadbalancer.healthcheck.timeout=5s"
       # Uncomment for HTTPS with domain:
       # - "traefik.http.routers.frontend-secure.rule=PathPrefix(`/`)"
       # - "traefik.http.routers.frontend-secure.entrypoints=websecure"
