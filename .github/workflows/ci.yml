@@ -31,7 +31,10 @@ jobs:
           coverage: xdebug
 
       - name: Install Composer
-        run: composer install --prefer-dist --no-progress
+        run: |
+          mkdir -p bootstrap/cache
+          chmod -R 775 bootstrap/cache
+          composer install --prefer-dist --no-progress
 
       - name: Run Pint (Laravel Code Style)
         run: ./vendor/bin/pint --test

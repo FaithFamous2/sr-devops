@@ -16,7 +16,6 @@ export function CreateSecretPage() {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [createdUrl, setCreatedUrl] = useState<string | null>(null);
-  const [createdId, setCreatedId] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const urlInputRef = useRef<HTMLInputElement>(null);
@@ -34,7 +33,6 @@ export function CreateSecretPage() {
     },
     onSuccess: (response) => {
       setCreatedUrl(response.data.url);
-      setCreatedId(response.data.id);
       addActivity(response.data.id, response.data.url);
       setFormData({ text: '', ttlSeconds: '', maxViews: '' });
       setErrors({});
@@ -121,7 +119,6 @@ export function CreateSecretPage() {
 
   const handleCreateAnother = () => {
     setCreatedUrl(null);
-    setCreatedId(null);
     setCopySuccess(false);
   };
 
