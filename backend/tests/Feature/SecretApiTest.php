@@ -156,16 +156,17 @@ class SecretApiTest extends TestCase
     /** @test */
     public function it_handles_expired_secrets(): void
     {
-        // Create a secret with 1 second TTL
+        // Create a secret
         $createResponse = $this->postJson('/api/v1/secrets', [
             'text' => 'my-secret-password',
-            'ttlSeconds' => 1,
         ]);
 
         $secretId = $createResponse->json('data.id');
 
-        // Wait for expiration
-        sleep(2);
+        // Manually expire the secret by setting expires_at in the past
+        \App\Models\Secret::where('public_id', $secretId)->update([
+            'expires_at' => \Carbon\Carbon::now()->subMinutes(5),
+        ]);
 
         // Try to retrieve expired secret
         $response = $this->getJson("/api/v1/secrets/{$secretId}");
