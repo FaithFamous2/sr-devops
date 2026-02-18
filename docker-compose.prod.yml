@@ -8,17 +8,21 @@ services:
       - "--api.dashboard=false"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=secure-drop-network"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
       - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@example.com}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--log.level=INFO"
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - letsencrypt:/letsencrypt
+    networks:
+      - secure-drop-network
     restart: always
 
   # =============================================================================
@@ -92,11 +96,17 @@ services:
       # - DB_USERNAME=${MYSQL_USER:-secure_drop_user}
       # - DB_PASSWORD=${MYSQL_PASSWORD:-change_me_in_production}
       # ===========================================================================
+    networks:
+      - secure-drop-network
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.backend.rule=PathPrefix(`/api`)"
       - "traefik.http.routers.backend.entrypoints=web"
+      - "traefik.http.routers.backend.priority=100"
       - "traefik.http.services.backend.loadbalancer.server.port=8080"
+      - "traefik.http.services.backend.loadbalancer.healthcheck.path=/up"
+      - "traefik.http.services.backend.loadbalancer.healthcheck.interval=10s"
+      - "traefik.http.services.backend.loadbalancer.healthcheck.timeout=5s"
     restart: always
     # depends_on:
     #   db:
@@ -115,11 +125,17 @@ services:
     build:
       context: ./frontend
       target: production
+    networks:
+      - secure-drop-network
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
       - "traefik.http.routers.frontend.entrypoints=web"
+      - "traefik.http.routers.frontend.priority=1"
       - "traefik.http.services.frontend.loadbalancer.server.port=80"
+      - "traefik.http.services.frontend.loadbalancer.healthcheck.path=/"
+      - "traefik.http.services.frontend.loadbalancer.healthcheck.interval=10s"
+      - "traefik.http.services.frontend.loadbalancer.healthcheck.timeout=5s"
     restart: always
     deploy:
       resources:
@@ -133,3 +149,7 @@ services:
 volumes:
   letsencrypt:
   # mysql-data:  # Uncomment when using MySQL to persist database data
+
+networks:
+  secure-drop-network:
+    driver: bridge
