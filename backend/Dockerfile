@@ -63,11 +63,18 @@ COPY --from=builder --chown=appuser:appgroup /app .
 COPY docker/nginx.conf /etc/nginx/sites-available/default
 
 # Create necessary directories and set permissions
-RUN mkdir -p /var/www/html/storage/logs /var/www/html/bootstrap/cache /var/www/html/database \
+RUN mkdir -p /var/www/html/storage/logs \
+    && mkdir -p /var/www/html/storage/framework/cache \
+    && mkdir -p /var/www/html/storage/framework/sessions \
+    && mkdir -p /var/www/html/storage/framework/views \
+    && mkdir -p /var/www/html/bootstrap/cache \
+    && mkdir -p /var/www/html/database \
     && mkdir -p /var/log/nginx /var/run \
+    && touch /var/www/html/database/database.sqlite \
     && chown -R appuser:appgroup /var/www/html \
     && chown -R appuser:appgroup /var/log/nginx /var/run \
     && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache /var/www/html/database \
+    && chmod 666 /var/www/html/database/database.sqlite \
     && rm -f /etc/nginx/sites-enabled/default \
     && ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
 

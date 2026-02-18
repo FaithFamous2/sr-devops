@@ -65,7 +65,11 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 
 # Wait for containers to be healthy
 echo "Waiting for containers to be healthy..."
-sleep 10
+sleep 15
+
+# Run migrations
+echo "Running database migrations..."
+docker exec secure-drop-backend php artisan migrate --force 2>/dev/null || echo "Migrations already run or not needed"
 
 # Show status
 echo ""
