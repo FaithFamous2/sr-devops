@@ -36,11 +36,19 @@ jobs:
           chmod -R 775 bootstrap/cache
           composer install --prefer-dist --no-progress
 
+      - name: Generate APP_KEY
+        run: php artisan key:generate
+
+      - name: Setup SQLite Database
+        run: |
+          touch database/database.sqlite
+          php artisan migrate --force
+
       - name: Run Pint (Laravel Code Style)
         run: ./vendor/bin/pint
 
       - name: Execute tests
-        run: php artisan test --coverage
+        run: php artisan test
 
   # Frontend Lint & Test
   frontend-test:
@@ -61,7 +69,9 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
-        run: npm install
+        run: |
+          rm -rf node_modules package-lock.json
+          npm install
 
       - name: Run ESLint
         run: npm run lint
