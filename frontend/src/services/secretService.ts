@@ -6,7 +6,9 @@ import {
   AppError,
 } from '@/types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://secure-drop.localhost';
+// In production, use empty string for relative URLs (same origin)
+// Traefik routes /api/* to the backend container
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 class SecretService {
   private async handleResponse<T>(response: Response): Promise<T> {

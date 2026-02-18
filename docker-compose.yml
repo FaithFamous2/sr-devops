@@ -87,6 +87,7 @@ services:
 
 networks:
   secure-drop-network:
+    name: secure-drop-network
     driver: bridge
 
 volumes:
