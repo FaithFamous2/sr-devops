@@ -36,8 +36,10 @@ jobs:
           chmod -R 775 bootstrap/cache
           composer install --prefer-dist --no-progress
 
-      - name: Generate APP_KEY
-        run: php artisan key:generate
+      - name: Setup Environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
 
       - name: Setup SQLite Database
         run: |
