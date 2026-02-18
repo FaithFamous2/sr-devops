@@ -1,0 +1,21 @@
+{
+    "variable": [
+        {
+            "id": "baseUrl",
+            "key": "baseUrl",
+            "type": "string",
+            "name": "string",
+            "value": "http:\/\/secure-drop.localhost"
+        }
+    ],
+    "info": {
+        "name": "Secure Drop API",
+        "_postman_id": "fef7c42b-7369-408d-9b7d-0f260c801b8c",
+        "description": "Secure API for sharing sensitive information that self-destructs after being viewed.",
+        "schema": "https:\/\/schema.getpostman.com\/json\/collection\/v2.1.0\/collection.json"
+    },
+    "item": [],
+    "auth": {
+        "type": "noauth"
+    }
+}

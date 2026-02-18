@@ -67,13 +67,17 @@ RUN mkdir -p /var/www/html/storage/logs \
     && mkdir -p /var/www/html/storage/framework/cache \
     && mkdir -p /var/www/html/storage/framework/sessions \
     && mkdir -p /var/www/html/storage/framework/views \
+    && mkdir -p /var/www/html/storage/app/public \
     && mkdir -p /var/www/html/bootstrap/cache \
     && mkdir -p /var/www/html/database \
     && mkdir -p /var/log/nginx /var/run \
     && touch /var/www/html/database/database.sqlite \
+    && touch /var/www/html/storage/logs/laravel.log \
     && chown -R appuser:appgroup /var/www/html \
     && chown -R appuser:appgroup /var/log/nginx /var/run \
-    && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache /var/www/html/database \
+    && chmod -R 775 /var/www/html/storage \
+    && chmod -R 775 /var/www/html/bootstrap/cache \
+    && chmod -R 775 /var/www/html/database \
     && chmod 666 /var/www/html/database/database.sqlite \
     && rm -f /etc/nginx/sites-enabled/default \
     && ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
@@ -100,12 +104,5 @@ CMD ["/bin/bash", "/start.sh"]
 # Stage 3: Development image
 FROM production AS development
 
-USER root
-
-# Install development dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    nano \
-    && rm -rf /var/lib/apt/lists/*
-
-USER appuser
+# Development image uses same as production
+# For local dev, volumes mount the source code

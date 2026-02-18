@@ -1,0 +1,10 @@
+openapi: 3.0.3
+info:
+  title: 'Secure Drop API'
+  description: 'Secure API for sharing sensitive information that self-destructs after being viewed.'
+  version: 1.0.0
+servers:
+  -
+    url: 'http://secure-drop.localhost'
+paths: []
+tags: []
