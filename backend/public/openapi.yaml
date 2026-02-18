@@ -1,0 +1,262 @@
+openapi: 3.0.3
+info:
+  title: 'Secure Drop API'
+  description: |
+    Secure Drop allows you to securely share sensitive information (like passwords or API keys) that self-destructs after being viewed.
+
+    ## Features
+    - **Burn on Read**: Secrets are deleted after being viewed
+    - **Time-based Expiration**: Optional TTL for secrets
+    - **View Limits**: Control how many times a secret can be viewed
+    - **Encryption at Rest**: All secrets are encrypted in the database
+    - **Secure IDs**: Non-sequential IDs prevent URL enumeration attacks
+  version: 1.0.0
+  contact:
+    name: API Support
+servers:
+  - url: http://secure-drop.localhost
+    description: Local development server
+tags:
+  - name: Health Check
+    description: Endpoints to monitor the health and status of the API
+  - name: Secrets
+    description: Operations for creating and retrieving secrets
+
+paths:
+  /api/health:
+    get:
+      tags:
+        - Health Check
+      summary: Health Check
+      description: Check the health status of the API and its dependencies (database). Used for monitoring and load balancer health checks.
+      operationId: healthCheck
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  timestamp:
+                    type: string
+                    format: date-time
+                    example: '2024-02-17T21:46:41+00:00'
+                  service:
+                    type: string
+                    example: secure-drop-api
+                  database:
+                    type: string
+                    example: connected
+        '503':
+          description: API is degraded (database unavailable)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: degraded
+                  timestamp:
+                    type: string
+                    format: date-time
+                    example: '2024-02-17T21:46:41+00:00'
+                  service:
+                    type: string
+                    example: secure-drop-api
+                  database:
+                    type: string
+                    example: disconnected
+                  error:
+                    type: string
+                    example: Connection refused
+
+  /api/health/liveness:
+    get:
+      tags:
+        - Health Check
+      summary: Liveness Probe
+      description: Simple endpoint for Kubernetes/Traefik liveness probes. Returns 200 OK if the application is running.
+      operationId: livenessProbe
+      responses:
+        '200':
+          description: Application is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: alive
+
+  /api/health/readiness:
+    get:
+      tags:
+        - Health Check
+      summary: Readiness Probe
+      description: Check if the application is ready to receive traffic. Tests database connectivity.
+      operationId: readinessProbe
+      responses:
+        '200':
+          description: Application is ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ready
+        '503':
+          description: Application is not ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: not ready
+                  reason:
+                    type: string
+                    example: database unavailable
+
+  /api/v1/secrets:
+    post:
+      tags:
+        - Secrets
+      summary: Create a new secret
+      description: Creates a new encrypted secret that will self-destruct after being viewed or after expiration
+      operationId: createSecret
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - text
+              properties:
+                text:
+                  type: string
+                  description: The secret text to encrypt
+                  example: my-api-key-12345
+                  maxLength: 10000
+                ttlSeconds:
+                  type: integer
+                  description: Time to live in seconds (10 to 2592000, ~30 days)
+                  example: 3600
+                  minimum: 10
+                  maximum: 2592000
+                maxViews:
+                  type: integer
+                  description: Maximum number of views allowed (1 to 100)
+                  example: 1
+                  minimum: 1
+                  maximum: 100
+                  default: 1
+      responses:
+        '201':
+          description: Secret created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        description: The unique ID of the secret
+                        example: V1StGXR8_Z5jdHi6B-myT
+                      url:
+                        type: string
+                        format: uri
+                        description: The URL to view the secret
+                        example: http://secure-drop-ui.localhost/secrets/V1StGXR8_Z5jdHi6B-myT
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+
+  /api/v1/secrets/{id}:
+    get:
+      tags:
+        - Secrets
+      summary: Retrieve a secret (burn-on-read)
+      description: Retrieves and consumes a secret. The secret is deleted after maxViews is reached.
+      operationId: getSecret
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The secret ID
+          schema:
+            type: string
+          example: V1StGXR8_Z5jdHi6B-myT
+      responses:
+        '200':
+          description: Secret retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      text:
+                        type: string
+                        description: The decrypted secret text
+                        example: my-api-key-12345
+                      remainingViews:
+                        type: integer
+                        description: Number of remaining views (0 if this was the last view)
+                        example: 0
+        '404':
+          description: Secret not found, expired, or burned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundError'
+
+components:
+  schemas:
+    ValidationError:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: VALIDATION_ERROR
+            message:
+              type: string
+              example: The given data was invalid.
+            details:
+              type: object
+              example:
+                text:
+                  - The secret text is required.
+
+    NotFoundError:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: SECRET_NOT_FOUND
+            message:
+              type: string
+              example: This secret has been burned, expired, or does not exist.

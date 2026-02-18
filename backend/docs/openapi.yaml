@@ -1,0 +1,10 @@
+openapi: 3.0.3
+info:
+  title: 'Secure Drop'
+  description: ''
+  version: 1.0.0
+servers:
+  -
+    url: 'http://secure-drop.localhost'
+paths: []
+tags: []

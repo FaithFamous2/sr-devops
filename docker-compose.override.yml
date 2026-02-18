@@ -1,0 +1,124 @@
+# Docker Compose Override for Local Development
+# This file is automatically loaded by docker-compose
+# It adds development-specific configurations
+
+services:
+  # Traefik - Enable Dashboard for development
+  traefik:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.localhost`)"
+      - "traefik.http.routers.traefik-dashboard.entrypoints=web"
+      - "traefik.http.routers.traefik-dashboard.service=api@internal"
+    ports:
+      - "8080:8080"  # Traefik dashboard
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # =============================================================================
+  # DATABASE CONFIGURATION
+  # =============================================================================
+  # By default, this uses SQLite for simplicity in development.
+  # To switch to MySQL, uncomment the 'db' service below and update the
+  # backend environment variables (DB_CONNECTION, DB_HOST, etc.)
+  # =============================================================================
+
+  # -----------------------------------------------------------------------------
+  # MySQL Database (Uncomment to use MySQL instead of SQLite)
+  # -----------------------------------------------------------------------------
+  # db:
+  #   image: mysql:8.0
+  #   container_name: secure-drop-db
+  #   restart: unless-stopped
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: root_password_change_me
+  #     MYSQL_DATABASE: secure_drop
+  #     MYSQL_USER: secure_drop_user
+  #     MYSQL_PASSWORD: secure_drop_password_change_me
+  #   volumes:
+  #     - mysql-data:/var/lib/mysql
+  #   networks:
+  #     - secure-drop-network
+  #   healthcheck:
+  #     test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root_password_change_me}"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #     start_period: 30s
+
+  # Backend - Development overrides
+  backend:
+    build:
+      target: development
+    volumes:
+      - ./backend:/var/www/html:cached
+      - backend-vendor:/var/www/html/vendor
+    environment:
+      - APP_ENV=local
+      - APP_DEBUG=true
+      - APP_KEY=base64:anZTCB2Kl2GWs7jY1i4r8Vih342Rz0FtOwN0/5cceG4=
+      - APP_URL=http://secure-drop.localhost
+      - FRONTEND_URL=http://secure-drop-ui.localhost
+      # ===========================================================================
+      # DATABASE CONFIGURATION - Choose ONE option below
+      # ===========================================================================
+
+      # --- OPTION 1: SQLite (Default - Simple, no extra container) ---
+      - DB_CONNECTION=sqlite
+
+      # --- OPTION 2: MySQL (Uncomment all lines below and comment out SQLite above) ---
+      # - DB_CONNECTION=mysql
+      # - DB_HOST=db                          # Service name of MySQL container
+      # - DB_PORT=3306                        # MySQL default port
+      # - DB_DATABASE=secure_drop             # Database name
+      # - DB_USERNAME=secure_drop_user        # MySQL username
+      # - DB_PASSWORD=secure_drop_password_change_me  # MySQL password (change in production!)
+      # ===========================================================================
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend.rule=Host(`secure-drop.localhost`)"
+      - "traefik.http.routers.backend.entrypoints=web"
+      - "traefik.http.services.backend.loadbalancer.server.port=8080"
+      - "traefik.http.services.backend.loadbalancer.healthcheck.path=/up"
+      - "traefik.http.services.backend.loadbalancer.healthcheck.interval=10s"
+      - "traefik.http.services.backend.loadbalancer.healthcheck.timeout=5s"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/up"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    # depends_on:
+    #   db:
+    #     condition: service_healthy  # Uncomment when using MySQL
+
+  # Frontend - Development with Vite dev server
+  frontend:
+    build:
+      target: development
+    volumes:
+      - ./frontend:/app:cached
+      - frontend-node-modules:/app/node_modules
+    environment:
+      - VITE_API_URL=http://secure-drop.localhost
+      - NODE_ENV=development
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`secure-drop-ui.localhost`)"
+      - "traefik.http.routers.frontend.entrypoints=web"
+      - "traefik.http.services.frontend.loadbalancer.server.port=5173"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5173/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  backend-vendor:
+  frontend-node-modules:
+  # mysql-data:  # Uncomment when using MySQL to persist database data
