@@ -6,10 +6,9 @@ import {
   AppError,
 } from '@/types';
 
-// Use VITE_API_URL from environment (set during Docker build)
-// In production, this should be the full API URL (e.g., http://51.20.121.247/api/v1)
-// In development, this defaults to empty string for relative URLs
-const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+// Use relative URLs for API calls in production (same origin)
+// This avoids CORS issues and works with any domain/IP
+const API_BASE_URL = '/api/v1';
 
 class SecretService {
   private async handleResponse<T>(response: Response): Promise<T> {
@@ -32,7 +31,7 @@ class SecretService {
   }
 
   async createSecret(data: CreateSecretRequest): Promise<CreateSecretResponse> {
-    const url = API_BASE_URL ? `${API_BASE_URL}/secrets` : '/api/v1/secrets';
+    const url = `${API_BASE_URL}/secrets`;
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -46,7 +45,7 @@ class SecretService {
   }
 
   async retrieveSecret(id: string): Promise<RetrieveSecretResponse> {
-    const url = API_BASE_URL ? `${API_BASE_URL}/secrets/${id}` : `/api/v1/secrets/${id}`;
+    const url = `${API_BASE_URL}/secrets/${id}`;
     const response = await fetch(url, {
       method: 'GET',
       headers: {
