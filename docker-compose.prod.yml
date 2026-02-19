@@ -8,6 +8,7 @@ services:
   api:
     image: ghcr.io/faithfamous2/sr-devops/backend:main
     restart: always
+    depends_on: []
     environment:
       - APP_ENV=production
       - APP_DEBUG=false
@@ -50,6 +51,7 @@ services:
   frontend:
     image: ghcr.io/faithfamous2/sr-devops/frontend:main
     restart: always
+    depends_on: []
     networks:
       - web
     labels:
@@ -94,7 +96,6 @@ services:
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
       # Ping endpoint for healthcheck
       - "--ping=true"
-      - "--ping.entrypoint=web"
       - "--log.level=INFO"
       # API and Dashboard
       - "--api.insecure=true"
@@ -109,11 +110,11 @@ services:
     networks:
       - web
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/ping || exit 1"]
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 20s
+      retries: 10
+      start_period: 30s
     deploy:
       resources:
         limits:
