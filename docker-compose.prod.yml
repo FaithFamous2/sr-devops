@@ -47,26 +47,21 @@ services:
     restart: always
     labels:
       - "traefik.enable=true"
-      # Catch-all router for any host, paths not starting with /api
-      - "traefik.http.routers.frontend.rule=PathPrefix(`/`) && !PathPrefix(`/api`)"
+      # Catch-all router (lower priority than API)
+      - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
       - "traefik.http.routers.frontend.entrypoints=web"
       - "traefik.http.routers.frontend.priority=1"
       - "traefik.http.services.frontend.loadbalancer.server.port=8080"
-      # SPA fallback: send all unknown paths to index.html
-      - "traefik.http.middlewares.frontend-spa.replacepathregex.regex=^/(.*)"
-      - "traefik.http.middlewares.frontend-spa.replacepathregex.replacement=/index.html"
-      - "traefik.http.routers.frontend.middlewares=frontend-spa"
       # Health check
       - "traefik.http.services.frontend.loadbalancer.healthcheck.path=/"
       - "traefik.http.services.frontend.loadbalancer.healthcheck.interval=30s"
       - "traefik.http.services.frontend.loadbalancer.healthcheck.timeout=5s"
       # HTTPS router
-      - "traefik.http.routers.frontend-secure.rule=PathPrefix(`/`) && !PathPrefix(`/api`)"
+      - "traefik.http.routers.frontend-secure.rule=PathPrefix(`/`)"
       - "traefik.http.routers.frontend-secure.entrypoints=websecure"
       - "traefik.http.routers.frontend-secure.priority=1"
       - "traefik.http.routers.frontend-secure.tls.certresolver=letsencrypt"
       - "traefik.http.routers.frontend-secure.service=frontend"
-      - "traefik.http.routers.frontend-secure.middlewares=frontend-spa"
     deploy:
       resources:
         limits:
@@ -79,7 +74,6 @@ services:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
       - "--providers.docker.endpoint=unix:///var/run/docker.sock"
-      - "--providers.docker.defaultapi=1.53"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
       # Let's Encrypt (enabled when DOMAIN is set)
@@ -95,6 +89,12 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - letsencrypt:/letsencrypt
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     deploy:
       resources:
         limits:
