@@ -376,7 +376,7 @@ jobs:
 
             # Test health endpoint
             echo "Testing health endpoint..."
-            curl -f http://localhost:80/api/health || {
+            curl -f http://localhost:80/up || {
               echo "✗ Health check failed"
               exit 1
             }
