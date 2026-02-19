@@ -52,8 +52,8 @@ RUN mkdir -p \
     && touch database/database.sqlite \
     && chmod -R 777 storage bootstrap/cache database
 
-# Create .env file for artisan commands
-RUN cp .env.example .env || true
+# Create .env file for production (use .env.production if available, fallback to .env.example)
+RUN cp .env.production .env 2>/dev/null || cp .env.example .env || true
 
 # Generate package manifest (runs ComposerScripts::postAutoloadDump + package:discover)
 RUN php artisan package:discover --ansi
