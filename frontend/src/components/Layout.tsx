@@ -47,7 +47,7 @@ export function Layout() {
               {/* Right side actions */}
               <div className="flex items-center gap-2">
                 <a
-                  href="http://secure-drop.localhost/docs"
+                  href="/docs"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="btn btn-ghost text-sm"

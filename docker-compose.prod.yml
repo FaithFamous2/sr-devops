@@ -23,7 +23,7 @@ services:
     labels:
       - "traefik.enable=true"
       # HTTP Router
-      - "traefik.http.routers.api.rule=PathPrefix(`/api`) || PathPrefix(`/up`)"
+      - "traefik.http.routers.api.rule=PathPrefix(`/api`) || PathPrefix(`/up`) || PathPrefix(`/docs`)"
       - "traefik.http.routers.api.entrypoints=web"
       - "traefik.http.routers.api.priority=100"
       - "traefik.http.services.api.loadbalancer.server.port=8080"
