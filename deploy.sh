@@ -64,13 +64,17 @@ else
     sed -i "s|^FRONTEND_URL=.*|FRONTEND_URL=${FRONTEND_URL}|" .env 2>/dev/null || true
 fi
 
-# Stop existing containers
-echo -e "${YELLOW}Stopping existing containers...${NC}"
-docker compose down 2>/dev/null || true
+# Stop and remove existing containers completely
+echo -e "${YELLOW}Stopping and removing existing containers...${NC}"
+docker compose -f docker-compose.yml -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
 
-# Build and start containers
+# Remove old containers and networks to ensure clean state
+echo -e "${YELLOW}Cleaning up old containers...${NC}"
+docker container prune -f 2>/dev/null || true
+
+# Build and start containers with force recreate
 echo -e "${YELLOW}Building and starting containers...${NC}"
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate
 
 # Wait for containers to be healthy
 echo -e "${YELLOW}Waiting for containers to be healthy...${NC}"
