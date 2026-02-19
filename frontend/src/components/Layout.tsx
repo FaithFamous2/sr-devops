@@ -17,12 +17,12 @@ export function Layout() {
 
   return (
     <ToastProvider>
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300 flex flex-col">
         {/* Sidebar */}
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
         {/* Main content */}
-        <div className="lg:pl-64">
+        <div className="lg:pl-64 flex flex-col flex-1">
           {/* Top bar */}
           <header className="sticky top-0 z-20 glass border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center justify-between px-4 py-3">
@@ -59,14 +59,14 @@ export function Layout() {
           </header>
 
           {/* Page content */}
-          <main className="p-4 md:p-6 lg:p-8">
+          <main className="p-4 md:p-6 lg:p-8 flex-1">
             <div className="animate-fade-in">
               <Outlet />
             </div>
           </main>
 
           {/* Footer */}
-          <footer className="border-t border-gray-200 dark:border-gray-700 py-6 px-4 text-center text-sm text-gray-500 dark:text-gray-400">
+          <footer className="mt-auto border-t border-gray-200 dark:border-gray-700 py-6 px-4 text-center text-sm text-gray-500 dark:text-gray-400">
             <p>Secure Drop - Self-destructing secrets • Built with Laravel & React</p>
           </footer>
         </div>
