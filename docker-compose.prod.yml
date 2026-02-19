@@ -1,111 +1,82 @@
 # =============================================================================
-# Docker Compose Production Configuration
+# Docker Compose Production Overrides
 # Production-specific settings: restart policies, SSL, resource limits.
 # Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 # =============================================================================
 
 services:
-  # Traefik - Reverse Proxy with SSL
   traefik:
     restart: always
     command:
       - "--api.insecure=false"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
-      - "--providers.docker.network=secure-drop-network"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
-      # Let's Encrypt configuration (uncomment when you have a domain)
-      # - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
-      # - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
-      # - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@example.com}"
-      # - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      # Let's Encrypt (enabled when DOMAIN is set)
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@example.com}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
       - "--ping=true"
-      - "--log.level=INFO"
+      - "--log.level=WARN"
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - letsencrypt:/letsencrypt
-    networks:
-      - secure-drop-network
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/ping || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
     deploy:
       resources:
         limits:
           memory: 256M
 
-  # Backend API - Laravel
-  backend:
+  api:
     restart: always
     environment:
       - APP_ENV=production
       - APP_DEBUG=false
-      - APP_KEY=${APP_KEY:-base64:anZTCB2Kl2GWs7jY1i4r8Vih342Rz0FtOwN0/5cceG4=}
-      - APP_URL=${APP_URL:-http://51.20.121.247}
-      - FRONTEND_URL=${FRONTEND_URL:-http://51.20.121.247}
-      - DB_CONNECTION=sqlite
-      - LOG_LEVEL=error
-    networks:
-      - secure-drop-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/up"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+      - APP_URL=${APP_URL}
+      - FRONTEND_URL=${FRONTEND_URL}
     labels:
       - "traefik.enable=true"
-      # Route /api and /up to backend
-      - "traefik.http.routers.backend.rule=PathPrefix(`/api`) || PathPrefix(`/up`)"
-      - "traefik.http.routers.backend.entrypoints=web"
-      - "traefik.http.routers.backend.priority=100"
-      - "traefik.http.services.backend.loadbalancer.server.port=8080"
-      - "traefik.http.services.backend.loadbalancer.healthcheck.path=/up"
-      - "traefik.http.services.backend.loadbalancer.healthcheck.interval=10s"
-      - "traefik.http.services.backend.loadbalancer.healthcheck.timeout=5s"
-      # Uncomment for HTTPS with domain:
-      # - "traefik.http.routers.backend-secure.rule=PathPrefix(`/api`) || PathPrefix(`/up`)"
-      # - "traefik.http.routers.backend-secure.entrypoints=websecure"
-      # - "traefik.http.routers.backend-secure.tls=true"
-      # - "traefik.http.routers.backend-secure.tls.certresolver=letsencrypt"
+      # HTTP Router
+      - "traefik.http.routers.api.rule=PathPrefix(`/api`) || PathPrefix(`/up`)"
+      - "traefik.http.routers.api.entrypoints=web"
+      - "traefik.http.routers.api.priority=100"
+      - "traefik.http.services.api.loadbalancer.server.port=8080"
+      # CORS middleware
+      - "traefik.http.middlewares.api-cors.headers.accesscontrolallowmethods=GET,POST,OPTIONS"
+      - "traefik.http.middlewares.api-cors.headers.accesscontrolallowheaders=Content-Type,Accept,Authorization"
+      - "traefik.http.middlewares.api-cors.headers.accesscontrolalloworiginlist=${FRONTEND_URL}"
+      - "traefik.http.middlewares.api-cors.headers.accesscontrolmaxage=3600"
+      - "traefik.http.routers.api.middlewares=api-cors"
+      # Health check
+      - "traefik.http.services.api.loadbalancer.healthcheck.path=/api/health"
+      - "traefik.http.services.api.loadbalancer.healthcheck.interval=30s"
+      - "traefik.http.services.api.loadbalancer.healthcheck.timeout=5s"
     deploy:
       resources:
         limits:
           memory: 512M
 
-  # Frontend - React/Nginx
   frontend:
     restart: always
-    networks:
-      - secure-drop-network
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+    build:
+      args:
+        VITE_API_URL: ${APP_URL}/api/v1
+        VITE_UI_URL: ${FRONTEND_URL}
     labels:
       - "traefik.enable=true"
-      # Route all other traffic to frontend (lower priority than backend)
+      # HTTP Router (catch-all, lower priority)
       - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
       - "traefik.http.routers.frontend.entrypoints=web"
       - "traefik.http.routers.frontend.priority=1"
       - "traefik.http.services.frontend.loadbalancer.server.port=8080"
+      # Health check
       - "traefik.http.services.frontend.loadbalancer.healthcheck.path=/"
-      - "traefik.http.services.frontend.loadbalancer.healthcheck.interval=10s"
+      - "traefik.http.services.frontend.loadbalancer.healthcheck.interval=30s"
       - "traefik.http.services.frontend.loadbalancer.healthcheck.timeout=5s"
-      # Uncomment for HTTPS with domain:
-      # - "traefik.http.routers.frontend-secure.rule=PathPrefix(`/`)"
-      # - "traefik.http.routers.frontend-secure.entrypoints=websecure"
-      # - "traefik.http.routers.frontend-secure.tls=true"
-      # - "traefik.http.routers.frontend-secure.tls.certresolver=letsencrypt"
     deploy:
       resources:
         limits:
@@ -113,8 +84,3 @@ services:
 
 volumes:
   letsencrypt:
-
-networks:
-  secure-drop-network:
-    name: secure-drop-network
-    driver: bridge

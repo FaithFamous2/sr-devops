@@ -1,95 +1,111 @@
-# Base Docker Compose Configuration
-# This file contains the base configuration for all services
-# Use docker-compose.override.yml for local development
-# Use docker-compose.prod.yml for production
+# =============================================================================
+# Docker Compose — Base Configuration
+# Defines services, networks, and volumes for the Secure Drop application.
+# =============================================================================
 
 services:
-  # Traefik Reverse Proxy
+  # ---------------------------------------------------------------------------
+  # Traefik — Reverse Proxy & Load Balancer
+  # ---------------------------------------------------------------------------
   traefik:
-    image: traefik:latest
-    container_name: secure-drop-traefik
+    image: traefik:v3.1
     command:
-      - "--api.dashboard=true"
       - "--api.insecure=true"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
-      - "--providers.docker.network=secure-drop-network"
       - "--entrypoints.web.address=:80"
-      - "--log.level=DEBUG"
+      - "--ping=true"
+      - "--log.level=INFO"
     ports:
       - "80:80"
+      - "8090:8080"   # Traefik dashboard
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
-      - secure-drop-network
-    restart: unless-stopped
+      - web
     healthcheck:
-      test: ["CMD", "traefik", "healthcheck"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 5s
 
-  # Laravel Backend API
-  backend:
+  # ---------------------------------------------------------------------------
+  # API — Laravel Backend
+  # ---------------------------------------------------------------------------
+  api:
     build:
       context: ./backend
+      dockerfile: Dockerfile
       target: production
-    container_name: secure-drop-backend
-    working_dir: /var/www/html
-    volumes:
-      - backend-data:/var/www/html/storage
-      - backend-db:/var/www/html/database
-    networks:
-      - secure-drop-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.backend.rule=Host(`secure-drop.localhost`)"
-      - "traefik.http.routers.backend.entrypoints=web"
-      - "traefik.http.services.backend.loadbalancer.server.port=8080"
-      - "traefik.http.services.backend.loadbalancer.healthcheck.path=/up"
-      - "traefik.http.services.backend.loadbalancer.healthcheck.interval=10s"
-      - "traefik.http.services.backend.loadbalancer.healthcheck.timeout=5s"
-    restart: unless-stopped
     environment:
+      - APP_NAME=SecureDrop
       - APP_ENV=production
       - APP_DEBUG=false
+      - APP_URL=http://secure-drop.localhost
+      - DB_CONNECTION=sqlite
+      - DB_DATABASE=/var/www/html/database/database.sqlite
+      - LOG_CHANNEL=stderr
+      - CACHE_DRIVER=file
+      - SESSION_DRIVER=file
+    volumes:
+      - api-storage:/var/www/html/storage
+      - api-database:/var/www/html/database
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=Host(`secure-drop.localhost`)"
+      - "traefik.http.routers.api.entrypoints=web"
+      - "traefik.http.services.api.loadbalancer.server.port=8080"
+      # CORS middleware
+      - "traefik.http.middlewares.api-cors.headers.accesscontrolallowmethods=GET,POST,OPTIONS"
+      - "traefik.http.middlewares.api-cors.headers.accesscontrolallowheaders=Content-Type,Accept,Authorization"
+      - "traefik.http.middlewares.api-cors.headers.accesscontrolalloworiginlist=http://secure-drop-ui.localhost"
+      - "traefik.http.middlewares.api-cors.headers.accesscontrolmaxage=3600"
+      - "traefik.http.routers.api.middlewares=api-cors"
+    networks:
+      - web
+    depends_on:
+      traefik:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/up"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
 
-  # React Frontend
+  # ---------------------------------------------------------------------------
+  # Frontend — React App served by Nginx
+  # ---------------------------------------------------------------------------
   frontend:
     build:
       context: ./frontend
+      dockerfile: Dockerfile
       target: production
-    container_name: secure-drop-frontend
-    networks:
-      - secure-drop-network
+      args:
+        VITE_API_URL: http://secure-drop.localhost/api/v1
+        VITE_UI_URL: http://secure-drop-ui.localhost
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.frontend.rule=Host(`secure-drop-ui.localhost`)"
       - "traefik.http.routers.frontend.entrypoints=web"
-      - "traefik.http.services.frontend.loadbalancer.server.port=80"
-      - "traefik.http.services.frontend.loadbalancer.healthcheck.path=/"
-      - "traefik.http.services.frontend.loadbalancer.healthcheck.interval=10s"
-      - "traefik.http.services.frontend.loadbalancer.healthcheck.timeout=5s"
-    restart: unless-stopped
+      - "traefik.http.services.frontend.loadbalancer.server.port=8080"
+    networks:
+      - web
+    depends_on:
+      api:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
       start_period: 10s
 
 networks:
-  secure-drop-network:
-    name: secure-drop-network
+  web:
     driver: bridge
 
 volumes:
-  backend-data:
-  backend-db:
+  api-storage:
+  api-database:

@@ -163,22 +163,66 @@ npm run lint
 
 ## Production Deployment
 
-### Using Docker Compose
+### Option 1: Quick Deploy (Auto-detect IP)
 
-1. **Set environment variables**
+The deploy script will automatically detect your server's public IP:
+
+```bash
+./deploy.sh
+```
+
+### Option 2: Deploy with Custom Domain/IP
+
+Set environment variables before running deploy:
+
+```bash
+# For IP-based deployment
+SERVER_IP=51.20.121.247 ./deploy.sh
+
+# For domain-based deployment (uses HTTPS)
+SERVER_IP=secure-drop.example.com ./deploy.sh
+
+# Or specify full URLs
+APP_URL=https://secure-drop.example.com FRONTEND_URL=https://secure-drop.example.com ./deploy.sh
+```
+
+### Option 3: Manual Docker Compose
+
+1. **Create .env file from example**
    ```bash
-   export APP_KEY=base64:your-32-character-key-here
-   export APP_URL=https://secure-drop.example.com
-   export FRONTEND_URL=https://secure-drop-ui.example.com
-   export BACKEND_HOST=secure-drop.example.com
-   export FRONTEND_HOST=secure-drop-ui.example.com
-   export ACME_EMAIL=admin@example.com
+   cp .env.example .env
    ```
 
-2. **Deploy with production configuration**
+2. **Edit .env with your settings**
    ```bash
-   docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+   # For IP-based deployment
+   APP_URL=http://YOUR_SERVER_IP
+   FRONTEND_URL=http://YOUR_SERVER_IP
+
+   # For domain-based deployment
+   APP_URL=https://your-domain.com
+   FRONTEND_URL=https://your-domain.com
    ```
+
+3. **Deploy with production configuration**
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+   ```
+
+### Environment Variables Reference
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `APP_URL` | Full URL to your application | `http://51.20.121.247` or `https://example.com` |
+| `FRONTEND_URL` | Frontend URL (usually same as APP_URL) | `http://51.20.121.247` |
+| `APP_KEY` | Laravel encryption key | `base64:...` (generate with `php artisan key:generate`) |
+| `SERVER_IP` | Server IP or domain (used by deploy.sh) | `51.20.121.247` or `example.com` |
+
+### How URLs Work
+
+- **Frontend**: Uses relative URLs for API calls (empty `VITE_API_URL`), so it automatically uses the same origin
+- **Backend**: Uses `APP_URL` for generating secret URLs and CORS configuration
+- **Traefik**: Routes `/api/*` to backend, everything else to frontend
 
 ### CI/CD Pipeline
 

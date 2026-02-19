@@ -6,8 +6,9 @@ import {
   AppError,
 } from '@/types';
 
-// In production, use empty string for relative URLs (same origin)
-// Traefik routes /api/* to the backend container
+// Use VITE_API_URL from environment (set during Docker build)
+// In production, this should be the full API URL (e.g., http://51.20.121.247/api/v1)
+// In development, this defaults to empty string for relative URLs
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 class SecretService {
@@ -31,7 +32,8 @@ class SecretService {
   }
 
   async createSecret(data: CreateSecretRequest): Promise<CreateSecretResponse> {
-    const response = await fetch(`${API_BASE_URL}/api/v1/secrets`, {
+    const url = API_BASE_URL ? `${API_BASE_URL}/secrets` : '/api/v1/secrets';
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -44,7 +46,8 @@ class SecretService {
   }
 
   async retrieveSecret(id: string): Promise<RetrieveSecretResponse> {
-    const response = await fetch(`${API_BASE_URL}/api/v1/secrets/${id}`, {
+    const url = API_BASE_URL ? `${API_BASE_URL}/secrets/${id}` : `/api/v1/secrets/${id}`;
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
