@@ -57,10 +57,13 @@ services:
   traefik:
     image: traefik:v3.3
     restart: always
+    environment:
+      - DOCKER_API_VERSION=1.44
     command:
       - "--api.insecure=false"
-      - "--providers.file=true"
-      - "--providers.file.path=/etc/traefik/traefik.yml"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.endpoint=unix:///var/run/docker.sock"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
       # Let's Encrypt (enabled when DOMAIN is set)
@@ -74,7 +77,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - letsencrypt:/letsencrypt
     deploy:
       resources:
