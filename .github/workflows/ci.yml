@@ -293,10 +293,10 @@ jobs:
 
             # Stop old containers and start new ones
             echo "Stopping old containers..."
-            docker-compose -f docker-compose.yml -f docker-compose.prod.yml down || true
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml down || true
 
             echo "Starting new containers..."
-            docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
             # Wait for containers to be healthy
             echo "Waiting for containers to be healthy..."
@@ -304,7 +304,7 @@ jobs:
 
             # Check container status
             echo "Container status:"
-            docker-compose -f docker-compose.yml -f docker-compose.prod.yml ps
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
 
             # Run migrations
             echo "Running database migrations..."
