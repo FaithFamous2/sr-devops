@@ -12,6 +12,7 @@ This document details the challenges encountered during the development and depl
 4. [Container Health Check Failures](#4-container-health-check-failures)
 5. [Traefik Timeout Errors](#5-traefik-timeout-errors)
 6. [Health Check API Documentation](#6-health-check-api-documentation)
+7. [Docker API Version Compatibility](#7-docker-api-version-compatibility)
 
 ---
 
@@ -371,6 +372,124 @@ paths:
         '503':
           description: API is degraded
 ```
+
+---
+
+## 7. Docker API Version Compatibility
+
+### Problem
+
+When deploying to an AWS EC2 instance, Traefik logs showed repeated errors:
+```
+ERR Failed to retrieve information of the docker client and server host error="Error response from daemon: client version 1.24 is too old. Minimum supported API version is 1.44, please upgrade your client to a newer version" providerName=docker
+```
+
+This resulted in:
+- 404 Page Not Found for both frontend and backend
+- Traefik unable to discover containers
+- All services showing as "healthy" but not accessible
+
+### Root Cause Analysis
+
+The issue occurs when there's a mismatch between:
+1. **Docker client API version** that Traefik uses internally
+2. **Docker server API version** running on the host
+
+Newer Docker servers (Docker 25+) require a minimum API version (1.44+), but Traefik's internal Docker client was attempting to use an older API version (1.24).
+
+### Investigation Steps
+
+1. **Check Docker version on server:**
+   ```bash
+   docker version
+   # Client: Docker 27.x
+   # Server: Docker 27.x
+   # API version: 1.44+
+   ```
+
+2. **Check Traefik logs:**
+   ```bash
+   docker compose logs traefik
+   # Shows: "client version 1.24 is too old"
+   ```
+
+3. **Verify containers are running:**
+   ```bash
+   docker ps
+   # All containers show as "healthy"
+   ```
+
+4. **Check Traefik dashboard:**
+   - No routers registered
+   - No services discovered
+   - Docker provider showing errors
+
+### Solution
+
+**File: `sr-devops/docker-compose.prod.yml`**
+
+Add the `DOCKER_API_VERSION` environment variable to the Traefik service:
+
+```yaml
+traefik:
+  image: traefik:v3.3
+  restart: always
+  environment:
+    # Fix for Docker API version compatibility - use server's supported version
+    - DOCKER_API_VERSION=1.44
+  command:
+    - "--providers.docker=true"
+    - "--providers.docker.exposedbydefault=false"
+    - "--providers.docker.endpoint=unix:///var/run/docker.sock"
+    - "--providers.docker.network=web"
+    # ... other configuration
+```
+
+**Why this works:**
+- `DOCKER_API_VERSION=1.44` tells Traefik's Docker client to use API version 1.44
+- This matches the minimum required by modern Docker servers
+- The Docker client will negotiate with the server for the best compatible version
+
+### Alternative Solutions
+
+1. **Use TCP endpoint with API version negotiation:**
+   ```yaml
+   command:
+     - "--providers.docker.endpoint=tcp://127.0.0.1:2375"
+   ```
+   Note: Requires enabling Docker TCP API on the host.
+
+2. **Downgrade Docker on the server** (not recommended):
+   - Using an older Docker version that supports API 1.24
+   - Not recommended for security reasons
+
+### Verification
+
+After applying the fix:
+
+```bash
+# Restart Traefik
+docker compose restart traefik
+
+# Check logs - should not show API version errors
+docker compose logs traefik
+
+# Verify routers are registered
+curl -s http://localhost:8080/api/http/routers | jq '.[] | .name'
+# Should show: "api@docker", "frontend@docker", etc.
+
+# Test the application
+curl http://localhost/api/health
+# Should return: {"status":"ok",...}
+```
+
+### Prevention
+
+To prevent this issue in the future:
+
+1. **Always specify DOCKER_API_VERSION** in production deployments
+2. **Keep Traefik updated** to the latest version
+3. **Document Docker version requirements** in deployment guides
 
 ---
 
