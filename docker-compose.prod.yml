@@ -30,6 +30,13 @@ services:
       - "traefik.http.services.api.loadbalancer.healthcheck.path=/api/health"
       - "traefik.http.services.api.loadbalancer.healthcheck.interval=30s"
       - "traefik.http.services.api.loadbalancer.healthcheck.timeout=5s"
+      # HTTPS Router (when domain is set)
+      - "traefik.http.routers.api-secure.rule=PathPrefix(`/api`) || PathPrefix(`/up`)"
+      - "traefik.http.routers.api-secure.entrypoints=websecure"
+      - "traefik.http.routers.api-secure.priority=100"
+      - "traefik.http.routers.api-secure.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.api-secure.service=api"
+      - "traefik.http.routers.api-secure.middlewares=api-cors"
     deploy:
       resources:
         limits:
@@ -49,6 +56,12 @@ services:
       - "traefik.http.services.frontend.loadbalancer.healthcheck.path=/"
       - "traefik.http.services.frontend.loadbalancer.healthcheck.interval=30s"
       - "traefik.http.services.frontend.loadbalancer.healthcheck.timeout=5s"
+      # HTTPS Router (when domain is set)
+      - "traefik.http.routers.frontend-secure.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.frontend-secure.entrypoints=websecure"
+      - "traefik.http.routers.frontend-secure.priority=1"
+      - "traefik.http.routers.frontend-secure.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.frontend-secure.service=frontend"
     deploy:
       resources:
         limits:
