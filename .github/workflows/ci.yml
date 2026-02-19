@@ -83,9 +83,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
-        run: |
-          rm -rf node_modules package-lock.json
-          npm install
+        run: npm ci
 
       - name: Lint (TypeScript)
         run: npx tsc --noEmit
@@ -249,6 +247,7 @@ jobs:
             cd /opt/secure-drop
 
             # Pull latest code
+            echo "Pulling latest code..."
             git pull origin main || true
 
             # Pull and restart containers
@@ -256,6 +255,7 @@ jobs:
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --remove-orphans
 
             # Run migrations
+            echo "Running migrations..."
             docker compose exec -T api php artisan migrate --force || true
 
             # Clean up
