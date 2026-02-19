@@ -82,7 +82,12 @@ sleep 10
 
 # Run migrations
 echo -e "${YELLOW}Running database migrations...${NC}"
-docker compose exec -T api php artisan migrate --force || echo "Migration may have already run"
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T api php artisan migrate --force || echo "Migration may have already run"
+
+# Clear cache
+echo -e "${YELLOW}Clearing application cache...${NC}"
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T api php artisan cache:clear || true
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T api php artisan config:clear || true
 
 # Show status
 echo ""
