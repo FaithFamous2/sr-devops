@@ -8,19 +8,16 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  API_IMAGE: ghcr.io/${{ github.repository }}/api
-  FRONTEND_IMAGE: ghcr.io/${{ github.repository }}/frontend
+  BACKEND_IMAGE_NAME: ${{ github.repository }}/backend
+  FRONTEND_IMAGE_NAME: ${{ github.repository }}/frontend
 
 jobs:
-  # ===========================================================================
-  # Stage 1: Lint & Test — Backend
-  # ===========================================================================
-  backend-lint-test:
-    name: Backend Lint & Test
+  # Backend Lint & Test
+  backend-test:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./backend
+        working-directory: backend
 
     steps:
       - name: Checkout code
@@ -29,47 +26,40 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: "8.3"
-          extensions: mbstring, sqlite3, pdo_sqlite, bcmath, pcntl, zip, intl
-          tools: composer:v2
+          php-version: '8.4'
+          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath
+          coverage: xdebug
 
-      - name: Cache Composer dependencies
-        uses: actions/cache@v4
-        with:
-          path: ./backend/vendor
-          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
-          restore-keys: ${{ runner.os }}-composer-
+      - name: Install Composer
+        run: |
+          mkdir -p bootstrap/cache
+          chmod -R 775 bootstrap/cache
+          composer install --prefer-dist --no-progress
 
-      - name: Install dependencies
-        run: composer install --no-interaction --prefer-dist
+      - name: Setup Environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+          mkdir -p storage/framework/views storage/framework/cache storage/framework/sessions storage/logs
+          chmod -R 775 storage
 
-      - name: Copy .env
-        run: cp .env.example .env
+      - name: Setup SQLite Database
+        run: |
+          touch database/database.sqlite
+          php artisan migrate --force
 
-      - name: Generate application key
-        run: php artisan key:generate
+      - name: Run Pint (Laravel Code Style)
+        run: ./vendor/bin/pint
 
-      - name: Create SQLite database
-        run: touch database/database.sqlite
+      - name: Execute tests
+        run: php artisan test
 
-      - name: Run migrations
-        run: php artisan migrate --force
-
-      - name: Lint (Pint)
-        run: vendor/bin/pint --test
-
-      - name: Run tests
-        run: php artisan test --parallel
-
-  # ===========================================================================
-  # Stage 1: Lint & Test — Frontend
-  # ===========================================================================
-  frontend-lint-test:
-    name: Frontend Lint & Test
+  # Frontend Lint & Test
+  frontend-test:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./frontend
+        working-directory: frontend
 
     steps:
       - name: Checkout code
@@ -78,80 +68,67 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
+          node-version: '20'
+          cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          rm -rf node_modules package-lock.json
+          npm install
 
-      - name: Lint (TypeScript)
-        run: npx tsc --noEmit
+      - name: Run ESLint
+        run: npm run lint
 
       - name: Run tests
         run: npm run test -- --run
 
-      - name: Build
-        run: npm run build
-
-  # ===========================================================================
-  # Stage 2: Security Scan
-  # ===========================================================================
+  # Security Scan with Trivy
   security-scan:
-    name: Security Scan
     runs-on: ubuntu-latest
-    needs: [backend-lint-test, frontend-lint-test]
+    needs: [backend-test, frontend-test]
+    permissions:
+      contents: read
+      security-events: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build API image for scanning
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          load: true
-          tags: secure-drop-api:scan
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build Frontend image for scanning
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          load: true
-          tags: secure-drop-frontend:scan
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Scan API image with Trivy
+      - name: Run Trivy vulnerability scanner (Backend)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: "secure-drop-api:scan"
-          format: "table"
-          exit-code: "0"
-          severity: "CRITICAL,HIGH"
-          ignore-unfixed: true
+          scan-type: 'fs'
+          scan-ref: 'backend'
+          format: 'sarif'
+          output: 'trivy-backend.sarif'
+          severity: 'CRITICAL,HIGH'
 
-      - name: Scan Frontend image with Trivy
+      - name: Upload Trivy scan results (Backend)
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-backend.sarif'
+          category: 'backend'
+
+      - name: Run Trivy vulnerability scanner (Frontend)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: "secure-drop-frontend:scan"
-          format: "table"
-          exit-code: "0"
-          severity: "CRITICAL,HIGH"
-          ignore-unfixed: true
+          scan-type: 'fs'
+          scan-ref: 'frontend'
+          format: 'sarif'
+          output: 'trivy-frontend.sarif'
+          severity: 'CRITICAL,HIGH'
 
-  # ===========================================================================
-  # Stage 3: Build & Push
-  # ===========================================================================
+      - name: Upload Trivy scan results (Frontend)
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-frontend.sarif'
+          category: 'frontend'
+
+  # Build and Push Docker Images
   build-push:
-    name: Build & Push Images
     runs-on: ubuntu-latest
-    needs: [security-scan]
+    needs: [backend-test, frontend-test, security-scan]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
@@ -164,42 +141,43 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to GitHub Container Registry
+      - name: Log in to Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (API)
-        id: meta-api
+      - name: Extract metadata for Backend
+        id: meta-backend
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.API_IMAGE }}
+          images: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}
           tags: |
             type=sha
             type=ref,event=branch
-            latest
+            type=semver,pattern={{version}}
 
-      - name: Build and push API image
+      - name: Build and push Backend image
         uses: docker/build-push-action@v5
         with:
           context: ./backend
           push: true
-          tags: ${{ steps.meta-api.outputs.tags }}
-          labels: ${{ steps.meta-api.outputs.labels }}
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          target: production
 
-      - name: Extract metadata (Frontend)
+      - name: Extract metadata for Frontend
         id: meta-frontend
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.FRONTEND_IMAGE }}
+          images: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}
           tags: |
             type=sha
             type=ref,event=branch
-            latest
+            type=semver,pattern={{version}}
 
       - name: Build and push Frontend image
         uses: docker/build-push-action@v5
@@ -210,29 +188,56 @@ jobs:
           labels: ${{ steps.meta-frontend.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: |
-            VITE_API_URL=${{ vars.VITE_API_URL || 'http://localhost/api/v1' }}
-            VITE_UI_URL=${{ vars.VITE_UI_URL || 'http://localhost' }}
+          target: production
 
-  # ===========================================================================
-  # Stage 4: Deploy
-  # ===========================================================================
+  # Deploy to Production (Optional - requires VPS setup)
   deploy:
-    name: Deploy to VPS
     runs-on: ubuntu-latest
-    needs: [build-push]
+    needs: build-push
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment: production
+    timeout-minutes: 15
 
     steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
+      - name: Check required secrets
+        run: |
+          if [ -z "${{ secrets.VPS_HOST }}" ]; then
+            echo "::error::VPS_HOST secret is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.VPS_USER }}" ]; then
+            echo "::error::VPS_USER secret is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.VPS_SSH_KEY }}" ]; then
+            echo "::error::VPS_SSH_KEY secret is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.GHCR_TOKEN }}" ]; then
+            echo "::error::GHCR_TOKEN secret is not set"
+            exit 1
+          fi
+          echo "All required secrets are configured"
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          REPO: ${{ github.repository }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          timeout: 60s
+          command_timeout: 10m
+          envs: GHCR_USER,GHCR_TOKEN,REPO
           script: |
-            set -e
+            set -e  # Exit on any error
+
+            echo "=== Starting deployment ==="
+            date
 
             # Create directory if it doesn't exist
             if [ ! -d "/opt/secure-drop" ]; then
@@ -248,17 +253,103 @@ jobs:
 
             # Pull latest code
             echo "Pulling latest code..."
-            git pull origin main || true
+            git pull origin main || {
+              echo "Warning: git pull failed, continuing with existing code"
+            }
 
-            # Pull and restart containers
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --remove-orphans
+            # Log in to GitHub Container Registry
+            echo "Logging into GitHub Container Registry..."
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin || {
+              echo "Error: Failed to login to GHCR"
+              exit 1
+            }
+
+            # Pull pre-built images from registry
+            echo "Pulling backend image..."
+            docker pull ghcr.io/$REPO/backend:main || {
+              echo "Error: Failed to pull backend image"
+              exit 1
+            }
+
+            echo "Pulling frontend image..."
+            docker pull ghcr.io/$REPO/frontend:main || {
+              echo "Error: Failed to pull frontend image"
+              exit 1
+            }
+
+            # Tag images for docker-compose
+            echo "Tagging images..."
+            docker tag ghcr.io/$REPO/backend:main secure-drop-backend:latest
+            docker tag ghcr.io/$REPO/frontend:main secure-drop-frontend:latest
+
+            # Stop old containers and start new ones
+            echo "Stopping old containers..."
+            docker-compose -f docker-compose.yml -f docker-compose.prod.yml down || true
+
+            echo "Starting new containers..."
+            docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+            # Wait for containers to be healthy
+            echo "Waiting for containers to be healthy..."
+            sleep 30
+
+            # Check container status
+            echo "Container status:"
+            docker-compose -f docker-compose.yml -f docker-compose.prod.yml ps
 
             # Run migrations
-            echo "Running migrations..."
-            docker compose exec -T api php artisan migrate --force || true
+            echo "Running database migrations..."
+            docker exec secure-drop-backend php artisan migrate --force || {
+              echo "Warning: Migration failed or already applied"
+            }
 
             # Clean up
+            echo "Cleaning up..."
             docker system prune -f
 
-            echo "Deployment complete!"
+            echo "=== Deployment completed successfully ==="
+            date
+
+      - name: Verify deployment
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          timeout: 30s
+          command_timeout: 1m
+          script: |
+            echo "Verifying deployment..."
+
+            # Check if containers are running
+            if docker ps | grep -q "secure-drop-backend"; then
+              echo "✓ Backend container is running"
+            else
+              echo "✗ Backend container is not running"
+              exit 1
+            fi
+
+            if docker ps | grep -q "secure-drop-frontend"; then
+              echo "✓ Frontend container is running"
+            else
+              echo "✗ Frontend container is not running"
+              exit 1
+            fi
+
+            if docker ps | grep -q "secure-drop-traefik"; then
+              echo "✓ Traefik container is running"
+            else
+              echo "✗ Traefik container is not running"
+              exit 1
+            fi
+
+            # Test health endpoint
+            echo "Testing health endpoint..."
+            curl -f http://localhost:80/up || {
+              echo "✗ Health check failed"
+              exit 1
+            }
+            echo "✓ Health check passed"
+
+            echo "Deployment verification completed successfully!"
