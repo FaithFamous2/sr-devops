@@ -9,9 +9,11 @@ FROM node:20-slim AS builder
 
 WORKDIR /app
 
-# Copy package files first for better layer caching
+# Copy package files
 COPY package.json package-lock.json ./
-RUN npm ci --no-audit
+
+# Remove package-lock and node_modules to force fresh install with correct platform deps
+RUN rm -rf package-lock.json node_modules && npm install
 
 # Copy source and build
 COPY . .
