@@ -1,0 +1,32 @@
+http:
+  routers:
+    api:
+      rule: "PathPrefix(`/api`) || PathPrefix(`/up`)"
+      entryPoints:
+        - web
+      priority: 100
+      service: api
+    frontend:
+      rule: "PathPrefix(`/`)"
+      entryPoints:
+        - web
+      priority: 1
+      service: frontend
+
+  services:
+    api:
+      loadBalancer:
+        servers:
+          - url: "http://api:8080"
+        healthCheck:
+          path: /api/health
+          interval: 30s
+          timeout: 5s
+    frontend:
+      loadBalancer:
+        servers:
+          - url: "http://frontend:8080"
+        healthCheck:
+          path: /
+          interval: 30s
+          timeout: 5s
