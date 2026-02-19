@@ -5,33 +5,8 @@
 # =============================================================================
 
 services:
-  traefik:
-    restart: always
-    command:
-      - "--api.insecure=false"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
-      - "--entrypoints.websecure.address=:443"
-      # Let's Encrypt (enabled when DOMAIN is set)
-      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
-      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
-      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@example.com}"
-      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
-      - "--ping=true"
-      - "--log.level=WARN"
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - letsencrypt:/letsencrypt
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-
   api:
+    image: ghcr.io/faithfamous2/sr-devops/backend:main
     restart: always
     environment:
       - APP_ENV=production
@@ -61,11 +36,8 @@ services:
           memory: 512M
 
   frontend:
+    image: ghcr.io/faithfamous2/sr-devops/frontend:main
     restart: always
-    build:
-      args:
-        VITE_API_URL: ${APP_URL}/api/v1
-        VITE_UI_URL: ${FRONTEND_URL}
     labels:
       - "traefik.enable=true"
       # HTTP Router (catch-all, lower priority)
@@ -81,6 +53,32 @@ services:
       resources:
         limits:
           memory: 128M
+
+  traefik:
+    restart: always
+    command:
+      - "--api.insecure=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # Let's Encrypt (enabled when DOMAIN is set)
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@example.com}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--ping=true"
+      - "--log.level=WARN"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - letsencrypt:/letsencrypt
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
 volumes:
   letsencrypt:
