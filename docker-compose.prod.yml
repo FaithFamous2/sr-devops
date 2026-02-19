@@ -47,21 +47,26 @@ services:
     restart: always
     labels:
       - "traefik.enable=true"
-      # HTTP Router (catch-all, lower priority)
-      - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
+      # Catch-all router for any host, paths not starting with /api
+      - "traefik.http.routers.frontend.rule=PathPrefix(`/`) && !PathPrefix(`/api`)"
       - "traefik.http.routers.frontend.entrypoints=web"
       - "traefik.http.routers.frontend.priority=1"
       - "traefik.http.services.frontend.loadbalancer.server.port=8080"
+      # SPA fallback: send all unknown paths to index.html
+      - "traefik.http.middlewares.frontend-spa.replacepathregex.regex=^/(.*)"
+      - "traefik.http.middlewares.frontend-spa.replacepathregex.replacement=/index.html"
+      - "traefik.http.routers.frontend.middlewares=frontend-spa"
       # Health check
       - "traefik.http.services.frontend.loadbalancer.healthcheck.path=/"
       - "traefik.http.services.frontend.loadbalancer.healthcheck.interval=30s"
       - "traefik.http.services.frontend.loadbalancer.healthcheck.timeout=5s"
-      # HTTPS Router (when domain is set)
-      - "traefik.http.routers.frontend-secure.rule=PathPrefix(`/`)"
+      # HTTPS router
+      - "traefik.http.routers.frontend-secure.rule=PathPrefix(`/`) && !PathPrefix(`/api`)"
       - "traefik.http.routers.frontend-secure.entrypoints=websecure"
       - "traefik.http.routers.frontend-secure.priority=1"
       - "traefik.http.routers.frontend-secure.tls.certresolver=letsencrypt"
       - "traefik.http.routers.frontend-secure.service=frontend"
+      - "traefik.http.routers.frontend-secure.middlewares=frontend-spa"
     deploy:
       resources:
         limits:
@@ -71,10 +76,10 @@ services:
     image: traefik:v3.3
     restart: always
     command:
-      - "--api.insecure=false"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
       - "--providers.docker.endpoint=unix:///var/run/docker.sock"
+      - "--providers.docker.defaultapi=1.53"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
       # Let's Encrypt (enabled when DOMAIN is set)
