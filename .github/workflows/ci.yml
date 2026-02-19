@@ -244,6 +244,9 @@ jobs:
             echo "=== Starting deployment ==="
             date
 
+            # Add Docker to PATH
+            export PATH=$PATH:/usr/bin
+
             # Convert REPO to lowercase for Docker (Docker requires lowercase image names)
             REPO_LOWER=$(echo "$REPO" | tr '[:upper:]' '[:lower:]')
             echo "Repository (lowercase): $REPO_LOWER"
